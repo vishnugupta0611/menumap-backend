@@ -5,7 +5,7 @@ import { asyncHandler } from "../utils/async-handler.js";
 import { ApiError } from "../utils/api-error.js";
 import { validate } from "../middleware/validate.js";
 import { paginated } from "../utils/pagination.js";
-import { requireAuth, optionalAuth } from "../middleware/auth.js";
+import { requireAuth, optionalAuth, requireRole } from "../middleware/auth.js";
 
 const createOrderSchema = z.object({
   restaurantId: z.string().min(1),
@@ -28,9 +28,8 @@ const statusSchema = z.object({
 export function createOrdersRouter(io) {
   const router = Router();
 
-  router.get("/", asyncHandler(async (req, res) => {
-    const filter = {};
-    if (req.query.restaurantId) filter.restaurantId = req.query.restaurantId;
+  router.get("/", requireAuth, requireRole(["owner"]), asyncHandler(async (req, res) => {
+    const filter = { restaurantId: req.user.restaurantId };
     if (req.query.status) filter.status = req.query.status;
 
     const result = await paginated(
@@ -53,6 +52,10 @@ export function createOrdersRouter(io) {
   }));
 
   router.post("/", optionalAuth, validate(createOrderSchema), asyncHandler(async (req, res) => {
+    if (req.user?.role === "owner") {
+      throw new ApiError(403, "Restaurant owners cannot place customer orders");
+    }
+
     const totalAmount = req.body.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const orderData = { ...req.body, totalAmount };
     if (req.user) {
@@ -64,6 +67,10 @@ export function createOrdersRouter(io) {
   }));
 
   router.get("/my-orders", requireAuth, asyncHandler(async (req, res) => {
+    if (req.user.role !== "customer") {
+      throw new ApiError(403, "Only customers can view customer order history");
+    }
+
     const filter = { customerId: req.user._id };
     const result = await paginated(
       Order.find(filter).sort({ createdAt: -1 }).populate("restaurantId", "name city slug logoImage"),
@@ -73,8 +80,12 @@ export function createOrdersRouter(io) {
     res.json(result);
   }));
 
-  router.patch("/:id/status", validate(statusSchema), asyncHandler(async (req, res) => {
-    const order = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
+  router.patch("/:id/status", requireAuth, requireRole(["owner"]), validate(statusSchema), asyncHandler(async (req, res) => {
+    const order = await Order.findOneAndUpdate(
+      { _id: req.params.id, restaurantId: req.user.restaurantId },
+      { status: req.body.status },
+      { new: true }
+    );
     if (!order) throw new ApiError(404, "Order not found");
     io.to(String(order.restaurantId)).emit("orders:status", order);
     res.json({ data: order });

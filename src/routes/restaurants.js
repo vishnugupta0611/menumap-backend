@@ -51,6 +51,7 @@ const restaurantSchema = z.object({
     showImage: z.boolean().optional(),
     showTabs: z.boolean().optional(),
     heroImageLayout: z.string().optional(),
+    galleryLayout: z.string().optional(),
   }).optional(),
 });
 
@@ -265,6 +266,30 @@ restaurantsRouter.get("/:city/:slug/reviews", asyncHandler(async (req, res) => {
   const restaurant = await findRestaurantByPublicParams(req);
   const reviews = await Review.find({ restaurantId: restaurant._id }).sort({ createdAt: -1 });
   res.json({ data: reviews });
+}));
+
+restaurantsRouter.get("/:city/:slug/gallery", asyncHandler(async (req, res) => {
+  const restaurant = await findRestaurantByPublicParams(req);
+  const gallery = await GalleryAsset.find({ restaurantId: restaurant._id }).sort({ sortOrder: 1 });
+  res.json({ data: gallery });
+}));
+
+restaurantsRouter.get("/:city/:slug/offers", asyncHandler(async (req, res) => {
+  const restaurant = await findRestaurantByPublicParams(req);
+  const now = new Date();
+  
+  // Find all active offers that haven't expired yet
+  const offers = await Offer.find({ 
+    restaurantId: restaurant._id,
+    active: true,
+    $or: [
+      { endsAt: { $exists: false } },
+      { endsAt: null },
+      { endsAt: { $gt: now } }
+    ]
+  }).sort({ createdAt: -1 });
+  
+  res.json({ data: offers });
 }));
 
 restaurantsRouter.post("/:city/:slug/reviews", validate(reviewSchema), asyncHandler(async (req, res) => {
