@@ -25,12 +25,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_ORIGIN || "http://localhost:3000",
+    origin: true,
+    credentials: true,
   },
 });
 
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "http://localhost:3000", credentials: true }));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 app.use(rateLimit({ windowMs: 60 * 1000, limit: 120 }));
