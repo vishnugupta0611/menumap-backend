@@ -108,7 +108,7 @@ async function findRestaurantByPublicParams(req) {
   const restaurant = await Restaurant.findOne({
     city: req.params.city.toLowerCase(),
     slug: req.params.slug.toLowerCase(),
-  });
+  }).lean();
   if (!restaurant) throw new ApiError(404, "Restaurant not found");
   return restaurant;
 }
@@ -258,19 +258,19 @@ restaurantsRouter.get("/:city/:slug", asyncHandler(async (req, res) => {
 
 restaurantsRouter.get("/:city/:slug/menu", asyncHandler(async (req, res) => {
   const restaurant = await findRestaurantByPublicParams(req);
-  const menu = await MenuItem.find({ restaurantId: restaurant._id, available: true }).sort({ category: 1, name: 1 });
+  const menu = await MenuItem.find({ restaurantId: restaurant._id, available: true }).sort({ category: 1, name: 1 }).lean();
   res.json({ data: menu });
 }));
 
 restaurantsRouter.get("/:city/:slug/reviews", asyncHandler(async (req, res) => {
   const restaurant = await findRestaurantByPublicParams(req);
-  const reviews = await Review.find({ restaurantId: restaurant._id }).sort({ createdAt: -1 });
+  const reviews = await Review.find({ restaurantId: restaurant._id }).sort({ createdAt: -1 }).lean();
   res.json({ data: reviews });
 }));
 
 restaurantsRouter.get("/:city/:slug/gallery", asyncHandler(async (req, res) => {
   const restaurant = await findRestaurantByPublicParams(req);
-  const gallery = await GalleryAsset.find({ restaurantId: restaurant._id }).sort({ sortOrder: 1 });
+  const gallery = await GalleryAsset.find({ restaurantId: restaurant._id }).sort({ sortOrder: 1 }).lean();
   res.json({ data: gallery });
 }));
 
@@ -287,7 +287,7 @@ restaurantsRouter.get("/:city/:slug/offers", asyncHandler(async (req, res) => {
       { endsAt: null },
       { endsAt: { $gt: now } }
     ]
-  }).sort({ createdAt: -1 });
+  }).sort({ createdAt: -1 }).lean();
   
   res.json({ data: offers });
 }));
