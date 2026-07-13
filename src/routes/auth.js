@@ -23,7 +23,8 @@ const registerOwnerSchema = z.object({
 const registerCustomerSchema = z.object({
   name: z.string().min(2).max(50),
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z.string().min(8).optional(),
+  clerkId: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -127,13 +128,16 @@ authRouter.post("/register/customer", asyncHandler(async (req, res) => {
     throw new ApiError(409, "Email already registered");
   }
 
-  // Create user
-  const user = await User.create({
+  const userPayload = {
     name: validated.name,
     email: validated.email,
-    password: validated.password, // Will be hashed by pre-save hook
     role: "customer",
-  });
+  };
+  if (validated.password) userPayload.password = validated.password;
+  if (validated.clerkId) userPayload.clerkId = validated.clerkId;
+
+  // Create user
+  const user = await User.create(userPayload);
 
   // Generate JWT token
   const token = user.generateAuthToken();
