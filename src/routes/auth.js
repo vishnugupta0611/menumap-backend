@@ -13,7 +13,8 @@ export const authRouter = Router();
 const registerOwnerSchema = z.object({
   name: z.string().min(2).max(50),
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z.string().min(8).optional(),
+  clerkId: z.string().optional(),
   restaurantName: z.string().min(2).max(100),
   city: z.string().min(2).max(50),
   cuisine: z.string().optional(),
@@ -62,14 +63,17 @@ authRouter.post("/register/owner", asyncHandler(async (req, res) => {
     address: `${validated.city}, India`,
   });
 
-  // Create user with restaurantId
-  const user = await User.create({
+  const userPayload = {
     name: validated.name,
     email: validated.email,
-    password: validated.password, // Will be hashed by pre-save hook
     role: "owner",
     restaurantId: restaurant._id,
-  });
+  };
+  if (validated.password) userPayload.password = validated.password;
+  if (validated.clerkId) userPayload.clerkId = validated.clerkId;
+
+  // Create user with restaurantId
+  const user = await User.create(userPayload);
 
   // Update restaurant with ownerId
   restaurant.ownerId = user._id;
@@ -149,6 +153,61 @@ authRouter.post("/register/customer", asyncHandler(async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      photo: user.photo,
+      location: user.location,
+    },
+    token,
+  });
+}));
+const loginVerifiedSchema = z.object({
+  email: z.string().email(),
+  clerkId: z.string(),
+  name: z.string().optional(),
+  role: z.string().optional(),
+});
+
+// POST /api/auth/login-verified (Called by frontend after Clerk OTP/Google success)
+authRouter.post("/login-verified", asyncHandler(async (req, res) => {
+  let validated;
+  try {
+    validated = loginVerifiedSchema.parse(req.body);
+  } catch (error) {
+    throw new ApiError(400, error.errors?.[0]?.message || "Validation failed");
+  }
+
+  let user = await User.findOne({ email: validated.email });
+  
+  if (!user) {
+    if (validated.role === "customer") {
+      user = await User.create({
+        name: validated.name || "Customer",
+        email: validated.email,
+        clerkId: validated.clerkId,
+        role: "customer"
+      });
+    } else {
+      throw new ApiError(404, "Account not found. Please register your restaurant first.");
+    }
+  } else if (!user.clerkId && validated.clerkId) {
+    user.clerkId = validated.clerkId;
+    await user.save();
+  }
+
+  const token = user.generateAuthToken();
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  res.json({
+    user: {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      restaurantId: user.restaurantId,
       photo: user.photo,
       location: user.location,
     },

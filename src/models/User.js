@@ -6,7 +6,8 @@ const UserSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
+    password: { type: String }, // Optional for Clerk SSO users
+    clerkId: { type: String, unique: true, sparse: true }, // Sparse allows multiple nulls
     photo: { type: String, default: "" },
     location: { type: String, default: "" },
     role: { type: String, enum: ["owner", "customer"], required: true },
