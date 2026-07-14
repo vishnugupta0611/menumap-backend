@@ -25,6 +25,10 @@ searchRouter.get("/dishes", asyncHandler(async (req, res) => {
   const lat = parseFloat(req.query.lat);
   const lng = parseFloat(req.query.lng);
   const city = req.query.city ? String(req.query.city) : undefined;
+  
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit) || 60);
+  const skip = (page - 1) * limit;
 
   const restFilter = openNow ? { openNow: true } : {};
   if (nearby && city) {
@@ -52,7 +56,12 @@ searchRouter.get("/dishes", asyncHandler(async (req, res) => {
   if (typeof veg === "boolean") filter.veg = veg;
   if (maxPrice) filter.price = { $lte: maxPrice };
 
-  let dishes = await MenuItem.find(filter).limit(60).sort(query ? { score: { $meta: "textScore" } } : { rating: -1 });
+  const total = await MenuItem.countDocuments(filter);
+
+  let dishes = await MenuItem.find(filter)
+    .sort(query ? { score: { $meta: "textScore" } } : { rating: -1 })
+    .skip(skip)
+    .limit(limit);
   
   let mappedDishes = dishes.map((dish) => ({
     ...dish.toObject(),
@@ -66,5 +75,7 @@ searchRouter.get("/dishes", asyncHandler(async (req, res) => {
 
   res.json({
     data: mappedDishes,
+    hasMore: total > skip + mappedDishes.length,
+    total
   });
 }));
