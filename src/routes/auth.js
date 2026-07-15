@@ -14,6 +14,33 @@ import { requireAuth } from "../middleware/auth.js";
 
 export const authRouter = Router();
 
+function getCookieOptions(req) {
+  const origin = req.get("origin") || "";
+  const isLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  const isHttpsRequest = req.secure || req.get("x-forwarded-proto") === "https";
+  const isProd = process.env.NODE_ENV === "production" || isHttpsRequest;
+  const isCrossSite = Boolean(origin) && !isLocalOrigin;
+
+  return {
+    httpOnly: true,
+    secure: isProd || isCrossSite,
+    sameSite: isCrossSite ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+}
+
+function setAuthCookie(req, res, token) {
+  res.cookie("token", token, getCookieOptions(req));
+}
+
+function clearAuthCookie(req, res) {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: getCookieOptions(req).secure,
+    sameSite: getCookieOptions(req).sameSite,
+  });
+}
+
 const requiredCoordinate = z.preprocess(
   (value) => (value === "" || value === null ? undefined : value),
   z.coerce.number({ invalid_type_error: "Restaurant location is required" }).finite()
@@ -61,7 +88,70 @@ authRouter.post("/register/owner", asyncHandler(async (req, res) => {
   // Check if email already exists
   const existingUser = await User.findOne({ email: validated.email });
   if (existingUser) {
-    throw new ApiError(409, "Email already registered");
+    if (existingUser.role !== "owner") {
+      throw new ApiError(409, "This email is already registered as a customer. Please use another email.");
+    }
+
+    if (!validated.clerkId) {
+      throw new ApiError(409, "Email already registered");
+    }
+
+    if (!existingUser.clerkId) {
+      existingUser.clerkId = validated.clerkId;
+      await existingUser.save();
+    }
+
+    let restaurant = existingUser.restaurantId
+      ? await Restaurant.findById(existingUser.restaurantId)
+      : null;
+
+    if (!restaurant) {
+      let slug = slugify(validated.restaurantName, { lower: true, strict: true });
+      let counter = 1;
+      while (await Restaurant.findOne({ slug })) {
+        slug = `${slugify(validated.restaurantName, { lower: true, strict: true })}-${counter}`;
+        counter++;
+      }
+
+      restaurant = await Restaurant.create({
+        name: validated.restaurantName,
+        slug,
+        city: validated.city,
+        cuisine: validated.cuisine || "Multi-Cuisine",
+        address: `${validated.city}, India`,
+        ownerId: existingUser._id,
+        location: {
+          lat: validated.lat,
+          lng: validated.lng,
+        },
+      });
+
+      existingUser.restaurantId = restaurant._id;
+      await existingUser.save();
+    }
+
+    const token = existingUser.generateAuthToken();
+    setAuthCookie(req, res, token);
+
+    return res.status(200).json({
+      user: {
+        _id: existingUser._id,
+        name: existingUser.name,
+        email: existingUser.email,
+        role: existingUser.role,
+        restaurantId: existingUser.restaurantId,
+        photo: existingUser.photo,
+        location: existingUser.location,
+      },
+      restaurant: {
+        _id: restaurant._id,
+        name: restaurant.name,
+        slug: restaurant.slug,
+        city: restaurant.city,
+        cuisine: restaurant.cuisine,
+      },
+      token,
+    });
   }
 
   // Generate unique slug for restaurant
@@ -103,15 +193,7 @@ authRouter.post("/register/owner", asyncHandler(async (req, res) => {
 
   // Generate JWT token
   const token = user.generateAuthToken();
-
-  // Set httpOnly cookie
-  const isProd = process.env.NODE_ENV === "production";
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "none" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+  setAuthCookie(req, res, token);
 
   // Return response (don't send password)
   res.status(201).json({
@@ -163,15 +245,7 @@ authRouter.post("/register/customer", asyncHandler(async (req, res) => {
 
   // Generate JWT token
   const token = user.generateAuthToken();
-
-  // Set httpOnly cookie
-  const isProd = process.env.NODE_ENV === "production";
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "none" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+  setAuthCookie(req, res, token);
 
   // Return response
   res.status(201).json({
@@ -218,13 +292,7 @@ authRouter.post("/login-verified", asyncHandler(async (req, res) => {
   }
 
   const token = user.generateAuthToken();
-  const isProd = process.env.NODE_ENV === "production";
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "none" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  setAuthCookie(req, res, token);
 
   res.json({
     user: {
@@ -267,15 +335,7 @@ authRouter.post("/login", asyncHandler(async (req, res) => {
 
   // Generate JWT token
   const token = user.generateAuthToken();
-
-  // Set httpOnly cookie
-  const isProd = process.env.NODE_ENV === "production";
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "none" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+  setAuthCookie(req, res, token);
 
   // Prepare response
   const response = {
@@ -328,13 +388,7 @@ authRouter.post("/employee-login", asyncHandler(async (req, res) => {
   const token = staff.generateAuthToken();
 
   // Set httpOnly cookie
-  const isProd = process.env.NODE_ENV === "production";
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "none" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  setAuthCookie(req, res, token);
 
   // Fetch restaurant
   const restaurant = await Restaurant.findById(staff.restaurantId);
@@ -385,8 +439,8 @@ authRouter.get("/me", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 // POST /api/auth/logout
-authRouter.post("/logout", (_req, res) => {
-  res.clearCookie("token");
+authRouter.post("/logout", (req, res) => {
+  clearAuthCookie(req, res);
   res.json({ message: "Logged out successfully" });
 });
 
@@ -462,6 +516,6 @@ authRouter.delete("/me", requireAuth, asyncHandler(async (req, res) => {
     }
   }
 
-  res.clearCookie("token");
+  clearAuthCookie(req, res);
   res.json({ message: "Account and all associated data permanently deleted" });
 }));
