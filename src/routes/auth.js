@@ -4,6 +4,7 @@ import { z } from "zod";
 import { User } from "../models/User.js";
 import { Staff } from "../models/Staff.js";
 import { Restaurant } from "../models/Restaurant.js";
+import { MenuItem } from "../models/MenuItem.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { ApiError } from "../utils/api-error.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -425,4 +426,30 @@ authRouter.put("/me", requireAuth, asyncHandler(async (req, res) => {
   }
 
   res.json(response);
+}));
+
+// DELETE /api/auth/me
+// Hard deletes the user, their restaurant, all menu items, and all associated employee accounts.
+authRouter.delete("/me", requireAuth, asyncHandler(async (req, res) => {
+  if (req.user.role !== "owner") {
+    throw new ApiError(403, "Only restaurant owners can delete their accounts");
+  }
+
+  const restaurantId = req.user.restaurantId;
+  
+  if (restaurantId) {
+    // 1. Delete all Menu Items
+    await MenuItem.deleteMany({ restaurantId });
+    // 2. Delete the Restaurant
+    await Restaurant.findByIdAndDelete(restaurantId);
+    // 3. Delete all Staff/Employees for this restaurant
+    await User.deleteMany({ restaurantId, role: "employee" });
+    await Staff.deleteMany({ restaurantId });
+  }
+
+  // 4. Delete the Owner User
+  await User.findByIdAndDelete(req.user._id);
+
+  res.clearCookie("token");
+  res.json({ message: "Account and all associated data permanently deleted" });
 }));
