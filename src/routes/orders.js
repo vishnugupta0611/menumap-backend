@@ -28,9 +28,11 @@ const statusSchema = z.object({
 export function createOrdersRouter(io) {
   const router = Router();
 
-  router.get("/", requireAuth, requireRole(["owner"]), asyncHandler(async (req, res) => {
+  router.get("/", requireAuth, requireRole(["owner", "employee"]), asyncHandler(async (req, res) => {
     const filter = { restaurantId: req.user.restaurantId };
     if (req.query.status) filter.status = req.query.status;
+    
+    console.log("GET /api/orders - User role:", req.user.role, "RestaurantId:", req.user.restaurantId, "Filter:", filter);
 
     const result = await paginated(
       Order.find(filter).sort({ createdAt: -1 }),
@@ -80,7 +82,7 @@ export function createOrdersRouter(io) {
     res.json(result);
   }));
 
-  router.patch("/:id/status", requireAuth, requireRole(["owner"]), validate(statusSchema), asyncHandler(async (req, res) => {
+  router.patch("/:id/status", requireAuth, requireRole(["owner", "employee"]), validate(statusSchema), asyncHandler(async (req, res) => {
     const order = await Order.findOneAndUpdate(
       { _id: req.params.id, restaurantId: req.user.restaurantId },
       { status: req.body.status },

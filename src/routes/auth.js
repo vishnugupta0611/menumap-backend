@@ -2,6 +2,7 @@ import { Router } from "express";
 import slugify from "slugify";
 import { z } from "zod";
 import { User } from "../models/User.js";
+import { Staff } from "../models/Staff.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { ApiError } from "../utils/api-error.js";
@@ -16,7 +17,7 @@ const registerOwnerSchema = z.object({
   password: z.string().min(8).optional(),
   clerkId: z.string().optional(),
   restaurantName: z.string().min(2).max(100),
-  city: z.string().min(2).max(50),
+  city: z.string().min(2).max(50).transform((val) => val.toLowerCase()),
   cuisine: z.string().optional(),
 });
 
@@ -29,6 +30,11 @@ const registerCustomerSchema = z.object({
 
 const loginSchema = z.object({
   email: z.string().email(),
+  password: z.string(),
+});
+
+const employeeLoginSchema = z.object({
+  username: z.string().trim().min(2),
   password: z.string(),
 });
 
@@ -184,9 +190,9 @@ authRouter.post("/login-verified", asyncHandler(async (req, res) => {
   let user = await User.findOne({ email: validated.email });
   
   if (!user) {
-    if (validated.role === "customer") {
+    if (validated.role === "customer" && validated.name) {
       user = await User.create({
-        name: validated.name || "Customer",
+        name: validated.name,
         email: validated.email,
         clerkId: validated.clerkId,
         role: "customer"
@@ -277,6 +283,62 @@ authRouter.post("/login", asyncHandler(async (req, res) => {
   res.json(response);
 }));
 
+// POST /api/auth/employee-login
+authRouter.post("/employee-login", asyncHandler(async (req, res) => {
+  let validated;
+  try {
+    validated = employeeLoginSchema.parse(req.body);
+  } catch (error) {
+    throw new ApiError(400, error.errors?.[0]?.message || "Validation failed");
+  }
+
+  // Find staff by username
+  const staff = await Staff.findOne({ username: validated.username });
+  if (!staff) {
+    throw new ApiError(401, "Invalid username or password");
+  }
+
+  // Check password
+  const isMatch = await staff.comparePassword(validated.password);
+  if (!isMatch) {
+    throw new ApiError(401, "Invalid username or password");
+  }
+  
+  if (staff.status === "Inactive") {
+    throw new ApiError(403, "Account is inactive. Please contact the owner.");
+  }
+
+  // Generate JWT token
+  const token = staff.generateAuthToken();
+
+  // Set httpOnly cookie
+  const isProd = process.env.NODE_ENV === "production";
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  // Fetch restaurant
+  const restaurant = await Restaurant.findById(staff.restaurantId);
+
+  res.json({
+    user: {
+      _id: staff._id,
+      name: staff.name,
+      username: staff.username,
+      role: "employee", // standardize for frontend
+      actualRole: staff.role, // "Chef", "Waiter", etc.
+      permissions: staff.permissions,
+      restaurantId: staff.restaurantId,
+      isEmployee: true
+    },
+    token,
+    restaurant
+  });
+}));
+
 // GET /api/auth/me
 authRouter.get("/me", requireAuth, asyncHandler(async (req, res) => {
   const response = {
@@ -288,11 +350,17 @@ authRouter.get("/me", requireAuth, asyncHandler(async (req, res) => {
       restaurantId: req.user.restaurantId,
       photo: req.user.photo,
       location: req.user.location,
+      ...(req.user.isEmployee && {
+        isEmployee: true,
+        permissions: req.user.permissions,
+        actualRole: req.user.actualRole || req.user.role,
+        username: req.user.username,
+      })
     },
   };
 
-  // If owner, include restaurant data
-  if (req.user.role === "owner" && req.user.restaurantId) {
+  // If owner or employee, include restaurant data
+  if (req.user.restaurantId) {
     const restaurant = await Restaurant.findById(req.user.restaurantId);
     response.restaurant = restaurant;
   }

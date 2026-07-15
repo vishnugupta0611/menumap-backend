@@ -52,6 +52,7 @@ const restaurantSchema = z.object({
     showTabs: z.boolean().optional(),
     heroImageLayout: z.string().optional(),
     galleryLayout: z.string().optional(),
+    featuredGalleryIds: z.array(z.string()).optional(),
   }).optional(),
 });
 
@@ -81,10 +82,12 @@ const reviewSchema = z.object({
 
 const staffSchema = z.object({
   name: z.string().trim().min(2),
+  username: z.string().trim().min(2).optional(),
+  password: z.string().min(6).optional(),
   role: z.enum(["Owner", "Admin", "Manager", "Chef", "Waiter"]).default("Waiter"),
   status: z.enum(["Active", "Inactive"]).default("Active"),
   avatar: z.string().trim().url().optional(),
-  permissions: z.string().trim().optional(),
+  permissions: z.array(z.string()).optional(),
   email: z.string().trim().email().optional(),
   clerkId: z.string().trim().optional(),
 });
@@ -106,8 +109,8 @@ const offerSchema = z.object({
 
 async function findRestaurantByPublicParams(req) {
   const restaurant = await Restaurant.findOne({
-    city: req.params.city.toLowerCase(),
-    slug: req.params.slug.toLowerCase(),
+    city: { $regex: new RegExp(`^${req.params.city}$`, 'i') },
+    slug: { $regex: new RegExp(`^${req.params.slug}$`, 'i') },
   }).lean();
   if (!restaurant) throw new ApiError(404, "Restaurant not found");
   return restaurant;
@@ -115,7 +118,7 @@ async function findRestaurantByPublicParams(req) {
 
 restaurantsRouter.get("/", asyncHandler(async (req, res) => {
   const filter = {};
-  if (req.query.city) filter.city = String(req.query.city).toLowerCase();
+  if (req.query.city) filter.city = { $regex: new RegExp(`^${String(req.query.city)}$`, 'i') };
   if (req.query.openNow === "true") filter.openNow = true;
   if (req.query.q) filter.$text = { $search: String(req.query.q) };
 
@@ -314,6 +317,13 @@ restaurantsRouter.delete("/reviews/:reviewId", asyncHandler(async (req, res) => 
 restaurantsRouter.delete("/gallery/:assetId", asyncHandler(async (req, res) => {
   await GalleryAsset.findByIdAndDelete(req.params.assetId);
   res.status(204).send();
+}));
+
+// Update gallery asset (sortOrder etc)
+restaurantsRouter.patch("/gallery/:assetId", validate(gallerySchema.partial()), asyncHandler(async (req, res) => {
+  const updated = await GalleryAsset.findByIdAndUpdate(req.params.assetId, req.body, { new: true, runValidators: true });
+  if (!updated) throw new ApiError(404, "Gallery asset not found");
+  res.json({ data: updated });
 }));
 
 // Edit offer

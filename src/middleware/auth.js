@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { User } from "../models/User.js";
+import { Staff } from "../models/Staff.js";
 import { ApiError } from "../utils/api-error.js";
 
 export async function requireAuth(req, _res, next) {
@@ -14,8 +15,18 @@ export async function requireAuth(req, _res, next) {
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "dev-secret-key");
     
-    // Find user and attach to request
-    const user = await User.findById(decoded.userId).select("-password");
+    let user;
+    if (decoded.isEmployee) {
+      user = await Staff.findById(decoded.userId).select("-password");
+      if (user) {
+        // Normalize properties to match expected req.user shape for frontend
+        user = user.toObject();
+        user.isEmployee = true;
+        user.role = "employee"; // Standardize role as employee for layout guards
+      }
+    } else {
+      user = await User.findById(decoded.userId).select("-password");
+    }
     
     if (!user) {
       throw new ApiError(401, "User not found");
@@ -52,7 +63,18 @@ export async function optionalAuth(req, _res, next) {
     if (!token) return next();
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "dev-secret-key");
-    const user = await User.findById(decoded.userId).select("-password");
+    
+    let user;
+    if (decoded.isEmployee) {
+      user = await Staff.findById(decoded.userId).select("-password");
+      if (user) {
+        user = user.toObject();
+        user.isEmployee = true;
+        user.role = "employee";
+      }
+    } else {
+      user = await User.findById(decoded.userId).select("-password");
+    }
     
     if (user) req.user = user;
     return next();
