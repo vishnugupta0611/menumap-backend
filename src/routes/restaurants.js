@@ -123,7 +123,9 @@ restaurantsRouter.get("/", asyncHandler(async (req, res) => {
   if (req.query.q) filter.$text = { $search: String(req.query.q) };
 
   const result = await paginated(
-    Restaurant.find(filter).sort({ rating: -1, name: 1 }),
+    Restaurant.find(filter)
+      .select("name slug city cuisine rating heroImage logoImage distanceKm priceForTwo openNow address")
+      .sort({ rating: -1, name: 1 }),
     Restaurant.countDocuments(filter),
     req.query
   );

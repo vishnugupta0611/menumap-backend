@@ -36,7 +36,8 @@ searchRouter.get("/dishes", asyncHandler(async (req, res) => {
     restFilter.city = { $regex: new RegExp(`^${city}$`, 'i') };
   }
 
-  const restaurants = await Restaurant.find(restFilter);
+  const restaurants = await Restaurant.find(restFilter)
+    .select("name slug city cuisine rating heroImage logoImage distanceKm priceForTwo openNow address location");
   
   const restaurantById = new Map();
   restaurants.forEach(r => {
