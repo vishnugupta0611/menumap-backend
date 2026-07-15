@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { createClerkClient } from "@clerk/backend";
+
+const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 import slugify from "slugify";
 import { z } from "zod";
 import { User } from "../models/User.js";
@@ -449,6 +452,15 @@ authRouter.delete("/me", requireAuth, asyncHandler(async (req, res) => {
 
   // 4. Delete the Owner User
   await User.findByIdAndDelete(req.user._id);
+
+  // 5. Delete from Clerk
+  if (req.user.clerkId) {
+    try {
+      await clerkClient.users.deleteUser(req.user.clerkId);
+    } catch (err) {
+      console.error("Failed to delete user from Clerk:", err);
+    }
+  }
 
   res.clearCookie("token");
   res.json({ message: "Account and all associated data permanently deleted" });
