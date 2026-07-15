@@ -10,6 +10,11 @@ import { requireAuth } from "../middleware/auth.js";
 
 export const authRouter = Router();
 
+const requiredCoordinate = z.preprocess(
+  (value) => (value === "" || value === null ? undefined : value),
+  z.coerce.number({ invalid_type_error: "Restaurant location is required" }).finite()
+);
+
 // Validation schemas
 const registerOwnerSchema = z.object({
   name: z.string().min(2).max(50),
@@ -19,6 +24,8 @@ const registerOwnerSchema = z.object({
   restaurantName: z.string().min(2).max(100),
   city: z.string().min(2).max(50).transform((val) => val.toLowerCase()),
   cuisine: z.string().optional(),
+  lat: requiredCoordinate,
+  lng: requiredCoordinate,
 });
 
 const registerCustomerSchema = z.object({
@@ -68,6 +75,10 @@ authRouter.post("/register/owner", asyncHandler(async (req, res) => {
     city: validated.city,
     cuisine: validated.cuisine || "Multi-Cuisine",
     address: `${validated.city}, India`,
+    location: {
+      lat: validated.lat,
+      lng: validated.lng,
+    },
   });
 
   const userPayload = {
@@ -173,9 +184,9 @@ authRouter.post("/register/customer", asyncHandler(async (req, res) => {
 }));
 const loginVerifiedSchema = z.object({
   email: z.string().email(),
-  clerkId: z.string(),
+  clerkId: z.string().min(1),
   name: z.string().optional(),
-  role: z.string().optional(),
+  role: z.enum(["owner", "customer"]),
 });
 
 // POST /api/auth/login-verified (Called by frontend after Clerk OTP/Google success)
@@ -190,16 +201,13 @@ authRouter.post("/login-verified", asyncHandler(async (req, res) => {
   let user = await User.findOne({ email: validated.email });
   
   if (!user) {
-    if (validated.role === "customer" && validated.name) {
-      user = await User.create({
-        name: validated.name,
-        email: validated.email,
-        clerkId: validated.clerkId,
-        role: "customer"
-      });
-    } else {
-      throw new ApiError(404, "Account not found. Please register your restaurant first.");
-    }
+    const accountType = validated.role === "owner" ? "restaurant" : "customer";
+    throw new ApiError(404, `Account not found. Please create your ${accountType} account first.`);
+  }
+
+  if (user.role !== validated.role) {
+    const correctPortal = user.role === "owner" ? "Restaurant Owner" : "Discovery User";
+    throw new ApiError(403, `This email belongs to a ${user.role} account. Please use the ${correctPortal} login tab.`);
   } else if (!user.clerkId && validated.clerkId) {
     user.clerkId = validated.clerkId;
     await user.save();
@@ -240,7 +248,11 @@ authRouter.post("/login", asyncHandler(async (req, res) => {
   // Find user by email
   const user = await User.findOne({ email: validated.email });
   if (!user) {
-    throw new ApiError(401, "Invalid email or password");
+    throw new ApiError(404, "Account not found. Please create your account first.");
+  }
+
+  if (!user.password) {
+    throw new ApiError(401, "This account uses Google sign-in. Please continue with Google.");
   }
 
   // Check password
