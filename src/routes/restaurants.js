@@ -16,6 +16,21 @@ import { paginated } from "../utils/pagination.js";
 
 export const restaurantsRouter = Router();
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, "Invalid id");
 const restaurantSchema = z.object({
   name: z.string().trim().min(2),
@@ -118,17 +133,30 @@ async function findRestaurantByPublicParams(req) {
 
 restaurantsRouter.get("/", asyncHandler(async (req, res) => {
   const filter = {};
-  if (req.query.city) filter.city = { $regex: new RegExp(`^${String(req.query.city)}$`, 'i') };
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (req.query.city) filter.city = { $regex: new RegExp(`^${escapeRegex(req.query.city)}$`, 'i') };
   if (req.query.openNow === "true") filter.openNow = true;
   if (req.query.q) filter.$text = { $search: String(req.query.q) };
 
   const result = await paginated(
     Restaurant.find(filter)
-      .select("name slug city cuisine rating heroImage logoImage distanceKm priceForTwo openNow address")
+      .select("name slug city cuisine rating heroImage logoImage distanceKm priceForTwo openNow address location")
       .sort({ rating: -1, name: 1 }),
     Restaurant.countDocuments(filter),
     req.query
   );
+  if (!isNaN(lat) && !isNaN(lng)) {
+    result.data = result.data
+      .map((restaurant) => {
+        const item = restaurant.toObject ? restaurant.toObject() : restaurant;
+        if (item.location?.lat && item.location?.lng) {
+          item.distanceKm = getDistance(lat, lng, item.location.lat, item.location.lng);
+        }
+        return item;
+      })
+      .sort((a, b) => (a.distanceKm ?? 999999) - (b.distanceKm ?? 999999));
+  }
   res.json(result);
 }));
 

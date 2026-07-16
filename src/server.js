@@ -15,6 +15,7 @@ import { restaurantsRouter } from "./routes/restaurants.js";
 import { searchRouter } from "./routes/search.js";
 import { createOrdersRouter } from "./routes/orders.js";
 import { authRouter } from "./routes/auth.js";
+import { dummyRouter } from "./routes/dummy.js";
 import { errorHandler, notFound } from "./middleware/error-handler.js";
 
 const logger = pino({
@@ -47,6 +48,7 @@ app.use("/api/search", searchRouter);
 app.use("/api/qr", qrRouter);
 app.use("/api/ocr", ocrRouter);
 app.use("/api/orders", createOrdersRouter(io));
+app.use("/api/dummy", dummyRouter);
 app.use(notFound);
 app.use(errorHandler);
 

@@ -5,6 +5,10 @@ import { asyncHandler } from "../utils/async-handler.js";
 
 export const searchRouter = Router();
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -31,9 +35,9 @@ searchRouter.get("/dishes", asyncHandler(async (req, res) => {
   const skip = (page - 1) * limit;
 
   const restFilter = openNow ? { openNow: true } : {};
-  if (nearby && city) {
+  if (city) {
     // Case insensitive match
-    restFilter.city = { $regex: new RegExp(`^${city}$`, 'i') };
+    restFilter.city = { $regex: new RegExp(`^${escapeRegex(city)}$`, 'i') };
   }
 
   const restaurants = await Restaurant.find(restFilter)
