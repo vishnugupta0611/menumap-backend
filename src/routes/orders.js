@@ -54,9 +54,8 @@ export function createOrdersRouter(io) {
   }));
 
   router.post("/", optionalAuth, validate(createOrderSchema), asyncHandler(async (req, res) => {
-    if (req.user?.role === "owner") {
-      throw new ApiError(403, "Restaurant owners cannot place customer orders");
-    }
+    // Owners and employees can now place orders (POS)
+
 
     const totalAmount = req.body.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const orderData = { ...req.body, totalAmount };
