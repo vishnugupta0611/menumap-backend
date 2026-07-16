@@ -96,10 +96,10 @@ dummyRouter.get("/", (req, res) => {
   ];
 
   const menu = [
-    { _id: "menu1", name: "Classic Paneer Tikka", description: "Soft paneer marinated with Indian spices", price: 250, category: "Starters", popular: true, veg: true },
-    { _id: "menu2", name: "Chicken Biryani", description: "Aromatic basmati rice cooked with tender chicken", price: 350, category: "Mains", popular: true, veg: false },
-    { _id: "menu3", name: "Butter Naan", description: "Soft Indian bread glazed with butter", price: 50, category: "Breads", popular: false, veg: true },
-    { _id: "menu4", name: "Chocolate Brownie", description: "Warm chocolate brownie with a scoop of vanilla ice cream", price: 180, category: "Desserts", popular: true, veg: true }
+    { _id: "menu1", name: "Classic Paneer Tikka", description: "Soft paneer marinated with Indian spices", price: 250, category: "Starters", popular: true, veg: true, image: "https://images.unsplash.com/photo-1599487405702-3e33fc333b28?q=80&w=400&auto=format&fit=crop" },
+    { _id: "menu2", name: "Chicken Biryani", description: "Aromatic basmati rice cooked with tender chicken", price: 350, category: "Mains", popular: true, veg: false, image: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?q=80&w=400&auto=format&fit=crop" },
+    { _id: "menu3", name: "Butter Naan", description: "Soft Indian bread glazed with butter", price: 50, category: "Breads", popular: false, veg: true, image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?q=80&w=400&auto=format&fit=crop" },
+    { _id: "menu4", name: "Chocolate Brownie", description: "Warm chocolate brownie with a scoop of vanilla ice cream", price: 180, category: "Desserts", popular: true, veg: true, image: "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?q=80&w=400&auto=format&fit=crop" }
   ];
 
   res.json({
