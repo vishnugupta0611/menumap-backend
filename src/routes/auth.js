@@ -7,6 +7,7 @@ import { User } from "../models/User.js";
 import { Staff } from "../models/Staff.js";
 import { Restaurant } from "../models/Restaurant.js";
 import { MenuItem } from "../models/MenuItem.js";
+import { Order } from "../models/Order.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { ApiError } from "../utils/api-error.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -551,12 +552,8 @@ authRouter.put("/me", requireAuth, asyncHandler(async (req, res) => {
 }));
 
 // DELETE /api/auth/me
-// Hard deletes the user, their restaurant, all menu items, and all associated employee accounts.
+// Hard deletes the user. Owners also delete their restaurant, menu items, orders, and staff.
 authRouter.delete("/me", requireAuth, asyncHandler(async (req, res) => {
-  if (req.user.role !== "owner") {
-    throw new ApiError(403, "Only restaurant owners can delete their accounts");
-  }
-
   const restaurantId = req.user.restaurantId;
   const appUser = await User.findById(req.user._id);
   if (!appUser) {
@@ -566,17 +563,23 @@ authRouter.delete("/me", requireAuth, asyncHandler(async (req, res) => {
   // Delete from Clerk first. If this fails, keep local data so the account is not half-deleted.
   await deleteClerkUserForAppUser(appUser);
   
-  if (restaurantId) {
+  if (appUser.role === "owner" && restaurantId) {
     // 1. Delete all Menu Items
     await MenuItem.deleteMany({ restaurantId });
-    // 2. Delete the Restaurant
+    // 2. Delete all Orders
+    await Order.deleteMany({ restaurantId });
+    // 3. Delete the Restaurant
     await Restaurant.findByIdAndDelete(restaurantId);
-    // 3. Delete all Staff/Employees for this restaurant
+    // 4. Delete all Staff/Employees for this restaurant
     await User.deleteMany({ restaurantId, role: "employee" });
     await Staff.deleteMany({ restaurantId });
   }
 
-  // 4. Delete the Owner User
+  if (appUser.role === "customer") {
+    await Order.deleteMany({ customerId: appUser._id });
+  }
+
+  // Delete the app user
   await User.findByIdAndDelete(req.user._id);
 
   clearAuthCookie(req, res);
