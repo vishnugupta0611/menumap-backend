@@ -31,6 +31,7 @@ const MOCK_RESTAURANTS = [
     logoImage: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?q=80&w=200&auto=format&fit=crop",
     email: "admin1@tandoorinights.com",
     password: "MenuMap@Restro2026!",
+    uiSettings: { layout: "bento", heroImageLayout: "full-width" }
   },
   {
     name: "The Kanpur Cafe",
@@ -42,6 +43,7 @@ const MOCK_RESTAURANTS = [
     logoImage: "https://images.unsplash.com/photo-1497935586351-b67a49e012bf?q=80&w=200&auto=format&fit=crop",
     email: "admin2@kanpurcafe.com",
     password: "MenuMap@Restro2026!",
+    uiSettings: { layout: "grid", heroImageLayout: "rounded" }
   },
   {
     name: "Sangam Sweets & Snacks",
@@ -53,6 +55,7 @@ const MOCK_RESTAURANTS = [
     logoImage: "https://images.unsplash.com/photo-1589302168068-96516f1964f5?q=80&w=200&auto=format&fit=crop",
     email: "admin3@sangamsweets.com",
     password: "MenuMap@Restro2026!",
+    uiSettings: { layout: "simple-list", heroImageLayout: "square" }
   },
   {
     name: "Nawab's Biryani",
@@ -64,6 +67,7 @@ const MOCK_RESTAURANTS = [
     logoImage: "https://images.unsplash.com/photo-1606491956689-2ea866880c8e?q=80&w=200&auto=format&fit=crop",
     email: "admin4@nawabsbiryani.com",
     password: "MenuMap@Restro2026!",
+    uiSettings: { layout: "list", heroImageLayout: "rounded" }
   },
   {
     name: "Global Fusion Kanpur",
@@ -75,6 +79,7 @@ const MOCK_RESTAURANTS = [
     logoImage: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=200&auto=format&fit=crop",
     email: "admin5@globalfusion.com",
     password: "MenuMap@Restro2026!",
+    uiSettings: { layout: "bento", heroImageLayout: "full-width" }
   }
 ];
 
@@ -151,7 +156,8 @@ async function main() {
           showImage: true,
           showDescription: true,
           showBanner: true,
-          heroImageLayout: "rounded",
+          heroImageLayout: mock.uiSettings.heroImageLayout,
+          layout: mock.uiSettings.layout,
           galleryLayout: "grid"
         },
         socialLinks: { instagram: "https://instagram.com", facebook: "https://facebook.com" },
@@ -161,6 +167,14 @@ async function main() {
       // Update User with restaurant ID
       user.restaurantId = restaurant._id;
       await user.save();
+
+      // Create Gallery for the first two restaurants
+      if (mock.name.includes("Tandoori") || mock.name.includes("Kanpur Cafe")) {
+        await GalleryAsset.insertMany([
+          { restaurantId: restaurant._id, url: "https://images.unsplash.com/photo-1543339308-43e59d6b73a6", alt: "Dining space", type: "gallery" },
+          { restaurantId: restaurant._id, url: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1", alt: "Special Dish", type: "gallery" }
+        ]);
+      }
 
       // Create Categories and Menu Items
       for (const catName of MOCK_CATEGORIES) {
@@ -175,12 +189,13 @@ async function main() {
           await MenuItem.create({
             restaurantId: restaurant._id,
             categoryId: cat._id,
+            category: catName,
             name: `${catName} Item ${i}`,
             description: `Delicious ${catName.toLowerCase()} served fresh.`,
             price: Math.floor(Math.random() * 300) + 100,
             image: FOOD_IMAGE,
-            isVeg: Math.random() > 0.5,
-            isAvailable: true
+            veg: Math.random() > 0.5,
+            available: true
           });
         }
       }
