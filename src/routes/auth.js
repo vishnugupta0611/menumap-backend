@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { createClerkClient } from "@clerk/backend";
 
-const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 import slugify from "slugify";
 import { z } from "zod";
 import { User } from "../models/User.js";
@@ -13,6 +12,13 @@ import { ApiError } from "../utils/api-error.js";
 import { requireAuth } from "../middleware/auth.js";
 
 export const authRouter = Router();
+
+function getClerkClient() {
+  if (!process.env.CLERK_SECRET_KEY) {
+    throw new ApiError(500, "Clerk server key is not configured on the backend.");
+  }
+  return createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+}
 
 function getCookieOptions(req) {
   const origin = req.get("origin") || "";
@@ -39,6 +45,34 @@ function clearAuthCookie(req, res) {
     secure: getCookieOptions(req).secure,
     sameSite: getCookieOptions(req).sameSite,
   });
+}
+
+async function findClerkUserIdByEmail(email) {
+  if (!process.env.CLERK_SECRET_KEY || !email) return null;
+  const users = await getClerkClient().users.getUserList({
+    emailAddress: [email],
+    limit: 1,
+  });
+  return users.data?.[0]?.id || null;
+}
+
+async function deleteClerkUserById(clerkId) {
+  if (!clerkId) return false;
+  try {
+    await getClerkClient().users.deleteUser(clerkId);
+    return true;
+  } catch (error) {
+    const status = error.status || error.statusCode;
+    if (status === 404) return false;
+    throw error;
+  }
+}
+
+async function deleteClerkUserForAppUser(user) {
+  const clerkId = user.clerkId || await findClerkUserIdByEmail(user.email);
+  if (!clerkId) return false;
+
+  return deleteClerkUserById(clerkId);
 }
 
 const requiredCoordinate = z.preprocess(
@@ -76,6 +110,29 @@ const employeeLoginSchema = z.object({
   password: z.string(),
 });
 
+// GET /api/auth/account-status?email=x@y.com
+authRouter.get("/account-status", asyncHandler(async (req, res) => {
+  let email;
+  try {
+    email = z.string().email().parse(String(req.query.email || "").trim().toLowerCase());
+  } catch {
+    throw new ApiError(400, "Please enter a valid email address.");
+  }
+  const user = await User.findOne({ email }).select("email role restaurantId clerkId").lean();
+
+  let clerkExists = false;
+  if (!user && process.env.CLERK_SECRET_KEY) {
+    clerkExists = Boolean(await findClerkUserIdByEmail(email));
+  }
+
+  res.json({
+    exists: Boolean(user),
+    role: user?.role || null,
+    hasRestaurant: Boolean(user?.restaurantId),
+    clerkExists,
+  });
+}));
+
 // POST /api/auth/register/owner
 authRouter.post("/register/owner", asyncHandler(async (req, res) => {
   let validated;
@@ -92,6 +149,17 @@ authRouter.post("/register/owner", asyncHandler(async (req, res) => {
       throw new ApiError(409, "This email is already registered as a customer. Please use another email.");
     }
 
+    const existingRestaurant = existingUser.restaurantId
+      ? await Restaurant.findById(existingUser.restaurantId)
+      : null;
+
+    if (existingRestaurant) {
+      if (validated.clerkId && existingUser.clerkId !== validated.clerkId) {
+        await deleteClerkUserById(validated.clerkId);
+      }
+      throw new ApiError(409, "Restaurant account already exists. Please login instead.");
+    }
+
     if (!validated.clerkId) {
       throw new ApiError(409, "Email already registered");
     }
@@ -101,34 +169,28 @@ authRouter.post("/register/owner", asyncHandler(async (req, res) => {
       await existingUser.save();
     }
 
-    let restaurant = existingUser.restaurantId
-      ? await Restaurant.findById(existingUser.restaurantId)
-      : null;
-
-    if (!restaurant) {
-      let slug = slugify(validated.restaurantName, { lower: true, strict: true });
-      let counter = 1;
-      while (await Restaurant.findOne({ slug })) {
-        slug = `${slugify(validated.restaurantName, { lower: true, strict: true })}-${counter}`;
-        counter++;
-      }
-
-      restaurant = await Restaurant.create({
-        name: validated.restaurantName,
-        slug,
-        city: validated.city,
-        cuisine: validated.cuisine || "Multi-Cuisine",
-        address: `${validated.city}, India`,
-        ownerId: existingUser._id,
-        location: {
-          lat: validated.lat,
-          lng: validated.lng,
-        },
-      });
-
-      existingUser.restaurantId = restaurant._id;
-      await existingUser.save();
+    let slug = slugify(validated.restaurantName, { lower: true, strict: true });
+    let counter = 1;
+    while (await Restaurant.findOne({ slug })) {
+      slug = `${slugify(validated.restaurantName, { lower: true, strict: true })}-${counter}`;
+      counter++;
     }
+
+    const restaurant = await Restaurant.create({
+      name: validated.restaurantName,
+      slug,
+      city: validated.city,
+      cuisine: validated.cuisine || "Multi-Cuisine",
+      address: `${validated.city}, India`,
+      ownerId: existingUser._id,
+      location: {
+        lat: validated.lat,
+        lng: validated.lng,
+      },
+    });
+
+    existingUser.restaurantId = restaurant._id;
+    await existingUser.save();
 
     const token = existingUser.generateAuthToken();
     setAuthCookie(req, res, token);
@@ -229,6 +291,9 @@ authRouter.post("/register/customer", asyncHandler(async (req, res) => {
   // Check if email already exists
   const existingUser = await User.findOne({ email: validated.email });
   if (existingUser) {
+    if (validated.clerkId && existingUser.clerkId !== validated.clerkId) {
+      await deleteClerkUserById(validated.clerkId);
+    }
     throw new ApiError(409, "Email already registered");
   }
 
@@ -493,6 +558,13 @@ authRouter.delete("/me", requireAuth, asyncHandler(async (req, res) => {
   }
 
   const restaurantId = req.user.restaurantId;
+  const appUser = await User.findById(req.user._id);
+  if (!appUser) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // Delete from Clerk first. If this fails, keep local data so the account is not half-deleted.
+  await deleteClerkUserForAppUser(appUser);
   
   if (restaurantId) {
     // 1. Delete all Menu Items
@@ -506,15 +578,6 @@ authRouter.delete("/me", requireAuth, asyncHandler(async (req, res) => {
 
   // 4. Delete the Owner User
   await User.findByIdAndDelete(req.user._id);
-
-  // 5. Delete from Clerk
-  if (req.user.clerkId) {
-    try {
-      await clerkClient.users.deleteUser(req.user.clerkId);
-    } catch (err) {
-      console.error("Failed to delete user from Clerk:", err);
-    }
-  }
 
   clearAuthCookie(req, res);
   res.json({ message: "Account and all associated data permanently deleted" });
