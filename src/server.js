@@ -16,7 +16,7 @@ import { searchRouter } from "./routes/search.js";
 import { createOrdersRouter } from "./routes/orders.js";
 import { authRouter } from "./routes/auth.js";
 import { localOrdersRouter } from "./routes/localOrders.js";
-import { dummyRouter } from "./routes/dummy.js";
+import { sitemapRouter } from "./routes/sitemap.js";
 import { errorHandler, notFound } from "./middleware/error-handler.js";
 
 const logger = pino({
@@ -50,7 +50,7 @@ app.use("/api/qr", qrRouter);
 app.use("/api/ocr", ocrRouter);
 app.use("/api/orders", createOrdersRouter(io));
 app.use("/api/local-orders", localOrdersRouter);
-app.use("/api/dummy", dummyRouter);
+app.use("/api/sitemap", sitemapRouter);
 app.use(notFound);
 app.use(errorHandler);
 

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "seed:demo": "node src/seed-demo-owners.js"
   },
   "dependencies": {
     "@clerk/backend": "^3.10.0",
