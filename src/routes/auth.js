@@ -87,6 +87,7 @@ const registerOwnerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).optional(),
   clerkId: z.string().optional(),
+  photo: z.string().optional(),
   restaurantName: z.string().min(2).max(100),
   city: z.string().min(2).max(50).transform((val) => val.toLowerCase()),
   cuisine: z.string().optional(),
@@ -99,6 +100,7 @@ const registerCustomerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).optional(),
   clerkId: z.string().optional(),
+  photo: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -246,6 +248,7 @@ authRouter.post("/register/owner", asyncHandler(async (req, res) => {
   };
   if (validated.password) userPayload.password = validated.password;
   if (validated.clerkId) userPayload.clerkId = validated.clerkId;
+  if (validated.photo) userPayload.photo = validated.photo;
 
   // Create user with restaurantId
   const user = await User.create(userPayload);
@@ -305,6 +308,7 @@ authRouter.post("/register/customer", asyncHandler(async (req, res) => {
   };
   if (validated.password) userPayload.password = validated.password;
   if (validated.clerkId) userPayload.clerkId = validated.clerkId;
+  if (validated.photo) userPayload.photo = validated.photo;
 
   // Create user
   const user = await User.create(userPayload);
@@ -331,6 +335,7 @@ const loginVerifiedSchema = z.object({
   clerkId: z.string().min(1),
   name: z.string().optional(),
   role: z.enum(["owner", "customer"]),
+  photo: z.string().optional(),
 });
 
 // POST /api/auth/login-verified (Called by frontend after Clerk OTP/Google success)
@@ -349,18 +354,28 @@ authRouter.post("/login-verified", asyncHandler(async (req, res) => {
     throw new ApiError(404, `Account not found. Please create your ${accountType} account first.`);
   }
 
+  // Role mismatch — show helpful message
   if (user.role !== validated.role) {
     const correctPortal = user.role === "owner" ? "Restaurant Owner" : "Discovery User";
     throw new ApiError(403, `This email belongs to a ${user.role} account. Please use the ${correctPortal} login tab.`);
-  } else if (!user.clerkId && validated.clerkId) {
+  }
+
+  // Link clerkId if not already set (Google SSO on existing email/password account)
+  if (!user.clerkId && validated.clerkId) {
     user.clerkId = validated.clerkId;
+    await user.save();
+  }
+
+  // Update photo from Google if not already set
+  if (validated.photo && !user.photo) {
+    user.photo = validated.photo;
     await user.save();
   }
 
   const token = user.generateAuthToken();
   setAuthCookie(req, res, token);
 
-  res.json({
+  const response = {
     user: {
       _id: user._id,
       name: user.name,
@@ -371,7 +386,14 @@ authRouter.post("/login-verified", asyncHandler(async (req, res) => {
       location: user.location,
     },
     token,
-  });
+  };
+
+  if (user.role === "owner" && user.restaurantId) {
+    const restaurant = await Restaurant.findById(user.restaurantId);
+    response.restaurant = restaurant;
+  }
+
+  res.json(response);
 }));
 
 // POST /api/auth/login
