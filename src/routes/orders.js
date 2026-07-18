@@ -63,7 +63,7 @@ export function createOrdersRouter(io) {
       orderData.customerId = req.user._id;
     }
     const order = await Order.create(orderData);
-    io.to(String(order.restaurantId)).emit("orders:new", order);
+    io.to(order.restaurantId.toString()).emit("orders:new", order);
     res.status(201).json({ data: order });
   }));
 

@@ -42,7 +42,7 @@ const RestaurantSchema = new mongoose.Schema(
       showImage: { type: Boolean, default: true },
       showTabs: { type: Boolean, default: false },
       heroImageLayout: { type: String, default: "rounded" },
-      galleryLayout: { type: String, default: "simple" },
+      galleryLayout: { type: String, default: "unlimited" },
       featuredGalleryIds: [{ type: String }],
     },
   },

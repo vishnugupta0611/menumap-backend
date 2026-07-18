@@ -81,7 +81,7 @@ const menuItemSchema = z.object({
   name: z.string().trim().min(2),
   description: z.string().trim().optional(),
   price: z.number().nonnegative(),
-  image: z.string().trim().url().optional(),
+  image: z.string().trim().optional(),
   veg: z.boolean().default(true),
   popular: z.boolean().default(false),
   categoryId: objectId.optional(),

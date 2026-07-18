@@ -136,6 +136,7 @@ async function main() {
       const user = await User.create({
         name: mock.name,
         email: mock.email,
+        password: mock.password,
         clerkId: clerkUser.id,
         role: "owner"
       });
