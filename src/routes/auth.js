@@ -432,6 +432,7 @@ authRouter.post("/login", asyncHandler(async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      restaurantId: user.restaurantId,
       photo: user.photo,
       location: user.location,
     },
