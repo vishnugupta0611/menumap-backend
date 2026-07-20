@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@clerk/backend": "^3.10.0",
+    "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -26,7 +27,6 @@
     "qrcode": "^1.5.4",
     "slugify": "^1.6.9",
     "socket.io": "^4.8.1",
-    "tesseract.js": "^7.0.0",
     "zod": "^4.0.14"
   }
 }

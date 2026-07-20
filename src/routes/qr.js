@@ -11,7 +11,7 @@ qrRouter.get("/restaurants/:id", asyncHandler(async (req, res) => {
   if (!restaurant) throw new ApiError(404, "Restaurant not found");
 
   const baseUrl = process.env.PUBLIC_APP_URL || "https://heyrestro.com";
-  const url = `${baseUrl}/r/${restaurant.slug}`;
+  const url = `${baseUrl}/${restaurant.city.toLowerCase()}/${restaurant.slug}`;
   const dataUrl = await QRCode.toDataURL(url, { margin: 2, width: 512 });
   res.json({ data: { url, dataUrl } });
 }));
