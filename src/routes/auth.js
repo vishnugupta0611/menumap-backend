@@ -89,7 +89,7 @@ const registerOwnerSchema = z.object({
   clerkId: z.string().optional(),
   photo: z.string().optional(),
   restaurantName: z.string().min(2).max(100),
-  city: z.string().min(2).max(50).transform((val) => val.toLowerCase()),
+  city: z.string().min(2).max(50).trim().transform((val) => val.toLowerCase()),
   cuisine: z.string().optional(),
   lat: requiredCoordinate,
   lng: requiredCoordinate,
