@@ -43,6 +43,7 @@ const restaurantSchema = z.object({
   website: z.union([z.string().trim().url(), z.literal("")]).optional(),
   heroImage: z.union([z.string().trim().url(), z.literal("")]).optional(),
   logoImage: z.union([z.string().trim().url(), z.literal("")]).optional(),
+  qrCodeUrl: z.union([z.string().trim().url(), z.literal("")]).optional(),
   facilities: z.array(z.string()).optional(),
   story: z.string().trim().optional(),
   openNow: z.boolean().optional(),
@@ -67,6 +68,7 @@ const restaurantSchema = z.object({
     showTabs: z.boolean().optional(),
     heroImageLayout: z.string().optional(),
     galleryLayout: z.string().optional(),
+    qrCharacter: z.string().optional(),
     featuredGalleryIds: z.array(z.string()).optional(),
   }).optional(),
 });
