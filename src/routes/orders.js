@@ -53,6 +53,17 @@ export function createOrdersRouter(io) {
     res.json(result);
   }));
 
+  router.post("/guest", asyncHandler(async (req, res) => {
+    const { orderIds } = req.body;
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.json({ data: [] });
+    }
+    const result = await Order.find({ _id: { $in: orderIds } })
+      .sort({ createdAt: -1 })
+      .populate("restaurantId", "name city slug");
+    res.json({ data: result });
+  }));
+
   router.post("/", optionalAuth, validate(createOrderSchema), asyncHandler(async (req, res) => {
     // Owners and employees can now place orders (POS)
 
