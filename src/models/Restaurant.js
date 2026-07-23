@@ -46,6 +46,7 @@ const RestaurantSchema = new mongoose.Schema(
       galleryLayout: { type: String, default: "unlimited" },
       qrCharacter: { type: String, default: "img1" },
       featuredGalleryIds: [{ type: String }],
+      allowGuestOrders: { type: Boolean, default: false },
     },
   },
   { timestamps: true }

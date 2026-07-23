@@ -70,6 +70,7 @@ const restaurantSchema = z.object({
     galleryLayout: z.string().optional(),
     qrCharacter: z.string().optional(),
     featuredGalleryIds: z.array(z.string()).optional(),
+    allowGuestOrders: z.boolean().optional(),
   }).optional(),
 });
 
